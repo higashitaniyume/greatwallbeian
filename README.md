@@ -48,6 +48,8 @@
 ## 🚀 如何使用
 
 1.  **安装插件**后打开任何代码文件。
+    - 从VSC插件市场里面搜索 “`greatwallbeian`”
+    - 从[Release](https://github.com/higashitaniyume/greatwallbeian/releases)下载vsix文件
 2.  **发现冲突**：如果代码中出现了未备案的大写元素（例如 `UserAccount`），它会立即变红并显示：
     > `元素 "UserAccount" 未备案！编译/运行已拦截，请先完成备案。`
 3.  **完成备案**：
