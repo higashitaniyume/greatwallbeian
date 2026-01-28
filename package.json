@@ -42,5 +42,8 @@
     "@vscode/test-cli": "^0.0.12",
     "@vscode/test-electron": "^2.5.2"
   },
-  "publisher": "Valency"
+  "publisher": "Valency",
+  "repository": {
+    "url": "https://github.com/higashitaniyume/greatwallbeian"
+  }
 }
