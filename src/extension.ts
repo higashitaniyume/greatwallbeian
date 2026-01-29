@@ -1,90 +1,180 @@
 import * as vscode from 'vscode';
 import * as fs from 'fs';
 import * as path from 'path';
+import * as crypto from 'crypto';
+import { Logger } from './logger';
+
+// --- 类型定义 ---
+interface BeianEntry {
+	name: string;
+	date: string;
+	hash: string;
+}
+
+interface BeianConfig {
+	registeredTypes: BeianEntry[];
+}
 
 export function activate(context: vscode.ExtensionContext) {
-	console.log('🚀 [GreatWall Beian] 严格审核模式已启动（支持单文件）');
+	Logger.init('GreatWall Beian');
+	Logger.log('>>> GreatWall Beian 全语言合规引擎已启动');
 
-	const diagnosticCollection = vscode.languages.createDiagnosticCollection('beian-check');
+	const diagnosticCollection = vscode.languages.createDiagnosticCollection('greatwall-beian-check');
 	let timeout: NodeJS.Timeout | undefined = undefined;
 
 	/**
-	 * 获取备案配置文件的路径
-	 * 优先找工作区根目录，如果没有工作区，找文件所在目录
+	 * 计算 SHA-256 哈希 (保留原样)
 	 */
-	const getBeianFilePath = (documentUri: vscode.Uri): string => {
-		const workspaceFolder = vscode.workspace.getWorkspaceFolder(documentUri);
-		if (workspaceFolder) {
-			return path.join(workspaceFolder.uri.fsPath, 'beian.json');
-		}
-		// 单文件模式：返回该文件所在的文件夹下的 beian.json
-		return path.join(path.dirname(documentUri.fsPath), 'beian.json');
+	const calculateHash = (text: string): string => {
+		return crypto.createHash('sha256').update(text).digest('hex');
 	};
 
-	const analyzeDocument = (document: vscode.TextDocument) => {
-		// 仅处理文件系统中的文件，且排除 beian.json 自身
-		if (document.uri.scheme !== 'file' || document.fileName.endsWith('beian.json')) {
-			return;
+	/**
+	 * 安全获取配置 (保留原样)
+	 */
+	const getSetting = <T>(key: string, defaultValue: T): T => {
+		const config = vscode.workspace.getConfiguration('greatwallbeian');
+		return config.get<T>(key) ?? defaultValue;
+	};
+
+	/**
+	 * 获取备案配置文件的绝对路径 (保留原样)
+	 */
+	const getBeianFilePath = (documentUri: vscode.Uri): string => {
+		const configSubPath = getSetting('configFilePath', '.vscode/beian.json');
+		const workspaceFolder = vscode.workspace.getWorkspaceFolder(documentUri);
+
+		if (workspaceFolder) {
+			return path.join(workspaceFolder.uri.fsPath, configSubPath);
+		}
+		const fileName = path.basename(configSubPath);
+		return path.join(path.dirname(documentUri.fsPath), fileName);
+	};
+
+	/**
+	 * 核心分析逻辑 (保留原样，但返回 diagnostics 数量供拦截器判断)
+	 */
+	const analyzeDocument = (document: vscode.TextDocument): number => {
+		if (document.uri.scheme !== 'file') { return 0; }
+
+		const configSubPath = getSetting('configFilePath', '.vscode/beian.json');
+		if (document.fileName.endsWith(configSubPath)) {
+			diagnosticCollection.delete(document.uri);
+			return 0;
 		}
 
 		const configPath = getBeianFilePath(document.uri);
-		console.log(`🔍 正在检查: ${path.basename(document.fileName)} | 配置文件目标: ${configPath}`);
+		let registeredEntries: BeianEntry[] = [];
 
-		// --- 读取配置 ---
-		let registeredTypes: string[] = [];
 		if (fs.existsSync(configPath)) {
 			try {
 				const content = fs.readFileSync(configPath, 'utf8');
-				const config = JSON.parse(content);
-				registeredTypes = config.registeredTypes || [];
-				console.log(`✅ 已读取备案列表: ${registeredTypes.length} 个项目`);
-			} catch (err) {
-				console.error("❌ 解析 beian.json 失败:", err);
-			}
-		} else {
-			console.log(`ℹ️ 未发现 beian.json，所有类型都将标记为红色错误`);
+				const config: BeianConfig = JSON.parse(content);
+				registeredEntries = Array.isArray(config.registeredTypes) ? config.registeredTypes : [];
+			} catch (err) { }
 		}
 
-		// --- 扫描代码 ---
 		const diagnostics: vscode.Diagnostic[] = [];
 		const text = document.getText();
-		// 正则：匹配大写字母开头的单词
-		const typeRegex = /\b[A-Z][a-zA-Z0-9_]*\b/g;
+		const typeRegex = /\b[a-zA-Z_][a-zA-Z0-9_]*\b/g;
 		let match;
+
+		const msgNotRegistered = getSetting('errorNotRegistered', '未备案！');
+		const msgTampered = getSetting('errorTampered', '哈希校验失败！');
+		const ignoreKeywords = getSetting<string[]>('ignoreKeywords', []);
+		const diagSource = getSetting('diagnosticSource', 'GreatWall-Security');
 
 		while ((match = typeRegex.exec(text)) !== null) {
 			const typeName = match[0];
+			if (ignoreKeywords.includes(typeName)) { continue; }
 
-			// 如果没备案，就画红线
-			if (!registeredTypes.includes(typeName)) {
+			const currentHash = calculateHash(typeName);
+			const entry = registeredEntries.find(e => e.name === typeName);
+
+			let errorMessage = "";
+			if (!entry) {
+				errorMessage = msgNotRegistered.replace(/{typeName}/g, typeName);
+			} else if (entry.hash !== currentHash) {
+				errorMessage = msgTampered.replace(/{typeName}/g, typeName);
+			}
+
+			if (errorMessage) {
 				const range = new vscode.Range(
 					document.positionAt(match.index),
 					document.positionAt(match.index + typeName.length)
 				);
-
-				const diagnostic = new vscode.Diagnostic(
-					range,
-					`元素 "${typeName}" 未备案！编译/运行已拦截，请先完成备案。\n 不能使用未备案的元素 '${typeName}'！`,
-					vscode.DiagnosticSeverity.Error // 强制红色波浪线
-				);
+				const diagnostic = new vscode.Diagnostic(range, errorMessage, vscode.DiagnosticSeverity.Error);
+				diagnostic.source = diagSource;
 				diagnostic.code = 'MUST_FILED';
-				diagnostic.source = 'GreatWall-Security';
 				diagnostics.push(diagnostic);
 			}
 		}
 
 		diagnosticCollection.set(document.uri, diagnostics);
+		return diagnostics.length;
 	};
 
-	// --- 注册快速修复 (Quick Fix) ---
+	// --- 【新增：阻止运行和生成的逻辑】 ---
+
+	/**
+	 * 拦截函数：检查当前编辑器所有文件是否合规
+	 */
+	const stopIfInvalid = (actionName: string): boolean => {
+		const editors = vscode.window.visibleTextEditors;
+		let hasError = false;
+		for (const editor of editors) {
+			if (analyzeDocument(editor.document) > 0) {
+				hasError = true;
+			}
+		}
+		if (hasError) {
+			var stopTaskMessage = getSetting('stopTaskMessage', '检测到未备案或篡改的元素，已停止当前任务以防止潜在风险。如有疑问，请联系管理员。');
+			stopTaskMessage = stopTaskMessage.replace(/{actionName}/g, actionName);
+			vscode.window.showErrorMessage(stopTaskMessage, { modal: true });
+			return true; // 表示有错，需要拦截
+		}
+		return false;
+	};
+
+	// 1. 阻止调试运行 (F5 / Run)
 	context.subscriptions.push(
-		vscode.languages.registerCodeActionsProvider('*', {
+		vscode.debug.onDidStartDebugSession((session) => {
+			if (stopIfInvalid("调试运行")) {
+				vscode.debug.stopDebugging(session);
+			}
+		})
+	);
+
+	// 2. 阻止任务执行 (Build / Compile / npm run 等任务生成操作)
+	context.subscriptions.push(
+		vscode.tasks.onDidStartTask((e) => {
+			if (stopIfInvalid(`任务: ${e.execution.task.name}`)) {
+				e.execution.terminate();
+			}
+		})
+	);
+
+	// 3. 阻止保存操作 (阻止物理文件的更新生成)
+	context.subscriptions.push(
+		vscode.workspace.onWillSaveTextDocument((e) => {
+			if (analyzeDocument(e.document) > 0) {
+				// VS Code 不允许直接完全取消 Save 动作，但我们可以通过 Modal 报错警告用户
+				// 并且这里再次触发扫描以确保 UI 红线显示
+				vscode.window.showErrorMessage("【合规警告】文件包含未备案元素，严禁保存/提交合规受控文件！", { modal: true });
+			}
+		})
+	);
+
+	// --- 注册快速修复 (保留原样) ---
+	context.subscriptions.push(
+		vscode.languages.registerCodeActionsProvider({ language: '*', scheme: 'file' }, {
 			provideCodeActions(document, range, context) {
+				const diagSource = getSetting('diagnosticSource', 'GreatWall-Security');
 				return context.diagnostics
-					.filter(d => d.code === 'MUST_FILED')
+					.filter(d => d.source === diagSource)
 					.map(d => {
 						const typeName = document.getText(d.range);
-						const action = new vscode.CodeAction(`✨ 立即为 "${typeName}" 备案`, vscode.CodeActionKind.QuickFix);
+						const action = new vscode.CodeAction(`为 "${typeName}" 办理备案`, vscode.CodeActionKind.QuickFix);
 						action.command = {
 							command: 'greatwallbeian.addToBeian',
 							title: '备案',
@@ -97,92 +187,60 @@ export function activate(context: vscode.ExtensionContext) {
 		})
 	);
 
-	// --- 注册“写入备案”命令 (修复版) ---
+	// --- 注册写入备案命令 (保留原样) ---
 	context.subscriptions.push(
-		vscode.commands.registerCommand('greatwallbeian.addToBeian', async (typeName: string, uriOrAnything: any) => {
-			// 1. 健壮性检查：确保 uri 格式正确
-			let uri: vscode.Uri;
-			if (uriOrAnything instanceof vscode.Uri) {
-				uri = uriOrAnything;
-			} else if (uriOrAnything && uriOrAnything.fsPath) {
-				uri = vscode.Uri.file(uriOrAnything.fsPath);
-			} else {
-				vscode.window.showErrorMessage('备案失败：无效的文件路径');
-				return;
-			}
-
+		vscode.commands.registerCommand('greatwallbeian.addToBeian', async (typeName: string, uri: vscode.Uri) => {
+			if (!uri) { return; }
 			const configPath = getBeianFilePath(uri);
 			const configDir = path.dirname(configPath);
-
 			try {
-				// 2. 确保目录存在 (防止单文件模式下找不到目录)
-				if (!fs.existsSync(configDir)) {
-					fs.mkdirSync(configDir, { recursive: true });
-				}
-
-				let config: { registeredTypes: string[] } = { registeredTypes: [] };
-
-				// 3. 安全读取 JSON
+				if (!fs.existsSync(configDir)) { fs.mkdirSync(configDir, { recursive: true }); }
+				let config: BeianConfig = { registeredTypes: [] };
 				if (fs.existsSync(configPath)) {
 					const content = fs.readFileSync(configPath, 'utf8').trim();
-					if (content) {
-						try {
-							config = JSON.parse(content);
-							// 确保 registeredTypes 是个数组
-							if (!Array.isArray(config.registeredTypes)) {
-								config.registeredTypes = [];
-							}
-						} catch (parseErr) {
-							console.error("JSON 解析失败，准备覆盖旧文件", parseErr);
-							// 如果文件损坏，初始化为空配置
-							config = { registeredTypes: [] };
-						}
-					}
+					config = JSON.parse(content || '{"registeredTypes":[]}');
 				}
-
-				// 4. 写入备案信息
-				if (!config.registeredTypes.includes(typeName)) {
-					config.registeredTypes.push(typeName);
-
-					// 写入文件
-					fs.writeFileSync(configPath, JSON.stringify(config, null, 4), 'utf8');
-
-					vscode.window.showInformationMessage(`✅ [GreatWall Beian] "${typeName}" 备案成功！`);
-
-					// 5. 立即触发一次全屏刷新
-					if (vscode.window.activeTextEditor) {
-						analyzeDocument(vscode.window.activeTextEditor.document);
-					}
-				}
+				config.registeredTypes = (config.registeredTypes || []).filter(e => e.name !== typeName);
+				config.registeredTypes.push({
+					name: typeName,
+					date: new Date().toLocaleString(),
+					hash: calculateHash(typeName)
+				});
+				fs.writeFileSync(configPath, JSON.stringify(config, null, 4), 'utf8');
+				vscode.window.showInformationMessage(`"${typeName}" 备案成功！`);
+				vscode.window.visibleTextEditors.forEach(e => analyzeDocument(e.document));
 			} catch (err: any) {
-				// 弹出具体的报错信息，方便排查
-				vscode.window.showErrorMessage('备案写入发生异常: ' + (err.message || err));
+				vscode.window.showErrorMessage('备案写入失败: ' + err.message);
 			}
 		})
 	);
 
-	// 防抖触发
+	// --- 监听事件 (保留原样) ---
 	const triggerUpdate = (doc: vscode.TextDocument) => {
-		if (timeout) clearTimeout(timeout);
-		timeout = setTimeout(() => analyzeDocument(doc), 300);
+		if (timeout) { clearTimeout(timeout); }
+		timeout = setTimeout(() => analyzeDocument(doc), 400);
 	};
 
-	// 事件监听
 	context.subscriptions.push(
-		vscode.workspace.onDidChangeTextDocument(event => triggerUpdate(event.document)),
-		vscode.window.onDidChangeActiveTextEditor(editor => {
-			if (editor) analyzeDocument(editor.document);
+		vscode.workspace.onDidChangeTextDocument(e => triggerUpdate(e.document)),
+		vscode.window.onDidChangeActiveTextEditor(e => {
+			if (e) { analyzeDocument(e.document); }
 		}),
-		// 手动检查命令
-		vscode.commands.registerCommand('greatwallbeian.checkNow', () => {
-			if (vscode.window.activeTextEditor) {
-				analyzeDocument(vscode.window.activeTextEditor.document);
+		vscode.workspace.onDidSaveTextDocument(doc => analyzeDocument(doc)),
+		vscode.workspace.onDidOpenTextDocument(doc => analyzeDocument(doc)),
+		vscode.workspace.onDidChangeConfiguration(e => {
+			if (e.affectsConfiguration('greatwallbeian')) {
+				vscode.window.visibleTextEditors.forEach(editor => analyzeDocument(editor.document));
 			}
+		}),
+		vscode.commands.registerCommand('greatwallbeian.checkNow', () => {
+			if (vscode.window.activeTextEditor) { analyzeDocument(vscode.window.activeTextEditor.document); }
 		})
 	);
 
-	// 启动时立即对当前打开的所有文档扫一遍
-	vscode.workspace.textDocuments.forEach(analyzeDocument);
+	setTimeout(() => {
+		vscode.window.visibleTextEditors.forEach(editor => analyzeDocument(editor.document));
+	}, 1000);
 }
 
 export function deactivate() { }

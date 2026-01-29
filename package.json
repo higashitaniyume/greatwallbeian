@@ -2,7 +2,7 @@
   "name": "greatwallbeian",
   "displayName": "GreatWallBeian",
   "description": "代码备案合规检查工具",
-  "version": "1.0.1",
+  "version": "1.1.0",
   "engines": {
     "vscode": "^1.90.0"
   },
@@ -10,7 +10,7 @@
     "Linters"
   ],
   "activationEvents": [
-    "onStartupFinished"
+    "*"
   ],
   "main": "./dist/extension.js",
   "contributes": {
@@ -18,8 +18,64 @@
       {
         "command": "greatwallbeian.checkNow",
         "title": "GreatWall Beian: 立即执行合规扫描"
+      },
+      {
+        "command": "greatwallbeian.addToBeian",
+        "title": "GreatWall Beian: 为该元素备案"
       }
-    ]
+    ],
+    "configuration": {
+      "title": "GreatWall Beian",
+      "properties": {
+        "greatwallbeian.configFilePath": {
+          "type": "string",
+          "default": ".vscode/beian.json",
+          "description": "备案配置文件的相对路径（工作区模式下相对于根目录，单文件模式下相对于文件目录）。"
+        },
+        "greatwallbeian.ignoreKeywords": {
+          "type": "array",
+          "default": [
+            "True",
+            "False",
+            "None",
+            "String",
+            "Object",
+            "Array",
+            "Boolean",
+            "Number",
+            "INT",
+            "VOID",
+            "ID"
+          ],
+          "description": "需要忽略的系统关键字（不会被标记为未备案）。针对 Python 建议包含 True, False, None。"
+        },
+        "greatwallbeian.errorNotRegistered": {
+          "type": "string",
+          "default": "元素 \"{typeName}\" 无法使用，可能是因为未备案或未接入备案系统。根据相关要求，所有境内运行的软件元素均需备案。如有疑问，请联系管理员。",
+          "description": "当元素完全没有备案记录时显示的错误信息。"
+        },
+        "greatwallbeian.errorTampered": {
+          "type": "string",
+          "default": "元素 \"{typeName}\" 校验哈希不匹配！备案记录可能已被篡改。",
+          "description": "当找到备案记录但哈希值对不上时显示的错误信息。"
+        },
+        "greatwallbeian.diagnosticSource": {
+          "type": "string",
+          "default": "GreatWall-Security",
+          "description": "错误波浪线显示的来源名称。"
+        },
+        "greatwallbeian.diagnosticCode": {
+          "type": "string",
+          "default": "MUST_FILED",
+          "description": "诊断信息的内部错误代码标识。"
+        },
+        "greatwallbeian.stopTaskMessage": {
+          "type": "string",
+          "default": "任务：\"{actionName}\"已停止运行。检测到未备案或篡改的元素，已停止当前任务以防止潜在风险。请在问题列表中查看没有备案的元素。如有疑问，请联系管理员。",
+          "description": "当检测到未备案或篡改元素时，终止当前任务所显示的信息。"
+        }
+      }
+    }
   },
   "scripts": {
     "vscode:prepublish": "npm run package",
@@ -44,6 +100,7 @@
   },
   "publisher": "Valency",
   "repository": {
+    "type": "git",
     "url": "https://github.com/higashitaniyume/greatwallbeian"
   }
 }
