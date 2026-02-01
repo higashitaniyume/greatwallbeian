@@ -86,7 +86,8 @@
     "lint": "eslint src",
     "test": "vscode-test",
     "watch:tsc": "npm run watch",
-    "watch:esbuild": "node esbuild.js --watch"
+    "watch:esbuild": "node esbuild.js --watch",
+    "deploy": "vsce publish && ovsx publish -p $OVSX_PAT"
   },
   "devDependencies": {
     "@types/vscode": "^1.90.0",
