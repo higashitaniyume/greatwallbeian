@@ -1,39 +1,38 @@
 
-# GreatWall Beian —— 长城备案 ~~（此项目介绍只是AI写的，如果有哪里不对或者想添加一些内容，谢谢大家帮忙修改一下捏~）~~
+# GreatWall Beian（备案合规辅助工具）
 
-代码备案合规检查工具
+## 一、项目基本信息
+- 项目名称：GreatWall Beian
+- 维护单位：Valency（项目团队）
+- 联系方式：请在仓库 Issues 或维护单位指定的联系渠道提交咨询
+- 备案号：中ICP证114514114514
 
-## 功能
+## 二、适用范围与法律依据
+本工具用于辅助开发/运维人员在代码层面进行备案合规自检，帮助识别未备案或备案信息异常的代码元素。用户在实施备案事宜时，应遵照《中华人民共和国网络安全法》《互联网信息服务管理办法》及工业和信息化部等主管部门的相关规定办理正式备案手续。
 
-- **合规扫描**：实时检查代码中的元素是否已备案
-- **哈希验证**：验证备案元素的完整性
-- **快速备案**：为未备案的元素快速添加备案记录
-- **配置灵活**：支持自定义配置文件和忽略关键字
+## 三、功能说明
+- 实时合规扫描：分析源代码元素是否存在备案记录并标注诊断信息。
+- 快速备案操作：为选定元素生成并写入本地备案配置（工作区配置文件）。
+- 可配置项：支持自定义备案配置文件路径、忽略关键字、提示信息及诊断来源等。
 
-## 安装
+## 四、使用须知（合规要求）
+1. 本工具依赖工作区内或文件所在目录下的备案配置文件（默认 .vscode/beian.json），仅作为本地合规检查与记录之用。  
+2. 任何以本工具生成的备案内容均不等同于主管机关的正式备案记录，正式对外发布或运营前，责任主体应按规定向主管机关提交材料并取得正式备案号。  
+3. 维护单位对使用工具进行的备案结果不承担替代性法律责任，责任主体需保证提交给主管机关的信息真实性、完整性及合法性。  
+4. 对于法律适用或备案办理的具体流程及要求，请咨询所属通信管理局或法律顾问。
 
-在 VS Code 扩展市场中搜索 "GreatWallBeian" 或访问 [GitHub 仓库](https://github.com/higashitaniyume/greatwallbeian)
+## 五、配置与命令（简要）
+- 配置项（示例）：
+  - greatwallbeian.configFilePath：备案配置文件路径（默认 `.vscode/beian.json`）
+  - greatwallbeian.ignoreKeywords：忽略关键字列表
+  - greatwallbeian.errorNotRegistered：未备案提示模板
+  - greatwallbeian.errorTampered：哈希不一致提示模板
+- 命令：
+  - GreatWall Beian: 立即执行合规扫描（greatwallbeian.checkNow）
+  - GreatWall Beian: 为该元素备案（greatwallbeian.addToBeian）
 
-## 命令
+## 六、版本与更新
+如需更新或提交问题，请通过项目仓库的 Release 与 Issue 管理流程处理。
 
-- `GreatWall Beian: 立即执行合规扫描` - 触发代码扫描检查
-- `GreatWall Beian: 为该元素备案` - 为选中元素添加备案
-
-## 配置
-
-在工作区设置中配置以下选项：
-
-| 选项 | 说明 | 默认值 |
-|------|------|--------|
-| `greatwallbeian.configFilePath` | 备案配置文件路径 | `.vscode/beian.json` |
-| `greatwallbeian.ignoreKeywords` | 忽略的系统关键字 | 内置列表 |
-| `greatwallbeian.errorNotRegistered` | 未备案错误信息 | 默认提示 |
-| `greatwallbeian.errorTampered` | 篡改检测错误信息 | 默认提示 |
-| `greatwallbeian.diagnosticSource` | 诊断来源名称 | `GreatWall-Security` |
-| `greatwallbeian.diagnosticCode` | 错误代码标识 | `MUST_FILED` |
-| `greatwallbeian.stopTaskMessage` | 任务停止提示信息 | 默认提示 |
-
-## 版本
-
-- 当前版本：1.1.0
-- 最低 VS Code 版本：1.90.0
+## 七、声明
+本项目为合规检查工具，旨在提供技术层面的辅助支持。任何涉及正式备案、对外发布或法律责任的事务，应以主管机关的规定和法律意见为准。
