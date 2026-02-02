@@ -88,7 +88,7 @@ export function activate(context: vscode.ExtensionContext) {
 				registeredEntries = Array.isArray(config.registeredTypes) ? config.registeredTypes : [];
 			} catch (err: any) {
 				// [Error] 配置文件解析失败
-				Logger.error(`解析备案配置文件失败 [${configPath}]: ${err.message}`,err);
+				Logger.error(`解析备案配置文件失败 [${configPath}]: ${err.message}`, err);
 			}
 		} else {
 			// [Warn] 缺少备案配置文件
@@ -182,6 +182,21 @@ export function activate(context: vscode.ExtensionContext) {
 		})
 	);
 
+	// 使用 DebugConfigurationProvider 在调试配置解析阶段进行前置拦截（在启动前）
+	context.subscriptions.push(
+		vscode.debug.registerDebugConfigurationProvider('*', {
+			resolveDebugConfiguration(folder, config) {
+				const cfgName = (config && (config.name || config.program)) ? (config.name || config.program) : '调试会话';
+				if (stopIfInvalid(`调试: ${cfgName}`)) {
+					const msg = getSetting('stopTaskMessage', '检测到未备案或篡改的元素，已停止当前任务以防止潜在风险。');
+					vscode.window.showErrorMessage(msg.replace(/{actionName}/g, `调试: ${cfgName}`), { modal: true });
+					return undefined; // 返回 undefined 将取消本次调试启动
+				}
+				return config;
+			}
+		})
+	);
+
 	// 2. 阻止任务执行
 	context.subscriptions.push(
 		vscode.tasks.onDidStartTask((e) => {
@@ -230,7 +245,7 @@ export function activate(context: vscode.ExtensionContext) {
 	context.subscriptions.push(
 		vscode.commands.registerCommand('greatwallbeian.addToBeian', async (typeName: string, uri: vscode.Uri) => {
 			if (!uri) {
-				Logger.error('命令调用失败: 缺少有效的 URI 参数',null);
+				Logger.error('命令调用失败: 缺少有效的 URI 参数', null);
 				return;
 			}
 
@@ -267,7 +282,7 @@ export function activate(context: vscode.ExtensionContext) {
 				vscode.window.visibleTextEditors.forEach(e => analyzeDocument(e.document));
 			} catch (err: any) {
 				// [Error] 写入失败
-				Logger.error(`备案写入失败: ${err.message}`,err);
+				Logger.error(`备案写入失败: ${err.message}`, err);
 				vscode.window.showErrorMessage('备案写入失败: ' + err.message);
 			}
 		})
